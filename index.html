@@ -2,75 +2,143 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>Daily Quote</title>
   <style>
+    :root {
+      --pad-x: 16px;
+      --pad-y: 10px;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
     body {
-      font-family: Arial, sans-serif;
-      background: no-repeat center center fixed;
-      background-size: cover;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
       margin: 0;
-      padding: 20px;
-      transition: background-image 0.5s ease-in-out;
+      background: #fff; /* white bars/padding for letterbox/pillarbox */
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: #1f2937;
+    }
+
+    /* Full-viewport image, never cropped */
+    #photo {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;         /* key: show whole image */
+      background: #fff;            /* fill remaining space with white bars */
+      user-select: none;
+      -webkit-user-drag: none;
+      touch-action: manipulation;
+    }
+
+    /* Top overlay that doesn’t block the picture */
+    .overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      display: flex;
+      justify-content: center;
+      padding:
+        calc(var(--pad-y) + env(safe-area-inset-top, 0px))
+        var(--pad-x)
+        var(--pad-y);
+      pointer-events: none; /* allow photo interactions if any */
+      z-index: 2;
     }
 
     .box {
-      background: rgba(255, 255, 255, 0.85);
-      border-radius: 16px;
-      padding: 30px 40px;
-      max-width: 600px;
+      pointer-events: auto;
+      max-width: 680px;
       width: 100%;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.1);
       text-align: center;
-      backdrop-filter: blur(4px);
+
+      /* Keep it minimal so it doesn’t cover the photo */
+      background: rgba(255,255,255,0.65);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      border-radius: 12px;
+      padding: 10px 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
 
     h2 {
+      font-size: 1.1rem;
       color: #1e40af;
-      margin-bottom: 20px;
+      margin: 0 0 6px;
+      font-weight: 700;
     }
 
     p {
-      font-size: 1.3em;
-      color: #1f2937;
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.35;
       white-space: pre-wrap;
     }
 
     .ref {
-      margin-top: 15px;
-      font-weight: bold;
+      margin-top: 6px;
+      font-size: 0.95rem;
+      font-weight: 600;
       color: #6b7280;
     }
 
     .error {
+      margin-top: 6px;
       color: #b91c1c;
-      font-size: 1em;
-      margin-top: 15px;
+      font-size: 0.9rem;
+    }
+
+    /* Small phones */
+    @media (max-width: 380px) {
+      .box { padding: 8px 10px; }
+      h2 { font-size: 1rem; }
+      p  { font-size: 0.95rem; }
+      .ref { font-size: 0.9rem; }
     }
   </style>
 </head>
 <body>
-  <div class="box">
-    <h2>Today's Encouragement</h2>
-    <p id="quote">Loading...</p>
-    <div class="ref" id="author"></div>
-    <div class="error" id="error"></div>
+  <!-- Fullscreen photo that will letterbox/pillarbox as needed -->
+  <img id="photo" alt="Background" loading="eager" decoding="async"/>
+
+  <!-- Minimal top overlay (doesn’t block the image) -->
+  <div class="overlay">
+    <div class="box">
+      <h2>Today's Encouragement</h2>
+      <p id="quote">Loading...</p>
+      <div class="ref" id="author"></div>
+      <div class="error" id="error"></div>
+    </div>
   </div>
 
   <script>
-    // Randomize background
+    // --- Randomize background photo (contain, never crop) ---
     function setRandomBackground() {
-      const totalImages = 5; // number of background images
-      const randomIndex = Math.floor(Math.random() * totalImages) + 1;
-      const bgImage = `background_${randomIndex}.jpg`;
-      document.body.style.backgroundImage = `url('${bgImage}')`;
+      const totalImages = 5;
+      const n = Math.floor(Math.random() * totalImages) + 1;
+      const src = `background_${n}.jpg`;
+      const img = document.getElementById('photo');
+
+      // In case you later add caching-busting, leave as-is for now
+      img.src = src;
+
+      // Optional: show a tiny fade when image loads
+      img.style.opacity = '0';
+      img.onload = () => {
+        img.style.transition = 'opacity 300ms ease';
+        img.style.opacity = '1';
+      };
+      img.onerror = () => {
+        // Fallback to a default if a file is missing
+        img.src = 'background_1.jpg';
+      };
     }
 
-    // Load quote
+    // --- Load a random quote from local quotes.json ---
     async function loadQuote() {
       const quoteEl = document.getElementById("quote");
       const authorEl = document.getElementById("author");
@@ -79,22 +147,7 @@
       try {
         const res = await fetch("quotes.json");
         if (!res.ok) throw new Error("File not found");
-        
+
         const quotes = await res.json();
-        const randomIndex = Math.floor(Math.random() * quotes.length);
-        const q = quotes[randomIndex];
-
-        quoteEl.textContent = q.quote;
-        authorEl.textContent = "— " + q.author;
-      } catch (e) {
-        quoteEl.textContent = "⚠️ Unable to load quotes.";
-        authorEl.textContent = "";
-        errEl.textContent = "Make sure quotes.json is in the same folder as index.html.";
-      }
-    }
-
-    setRandomBackground();
-    loadQuote();
-  </script>
-</body>
-</html>
+        const idx = Math.floor(Math.random() * quotes.length);
+        const q = quotes[i]()
