@@ -5,140 +5,173 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>Daily Quote</title>
   <style>
-    :root {
-      --pad-x: 16px;
-      --pad-y: 10px;
-    }
+    :root { --pad: 16px; }
 
-    html, body {
-      height: 100%;
-    }
-
+    html, body { height: 100%; }
     body {
       margin: 0;
-      background: #fff; /* white bars/padding for letterbox/pillarbox */
+      background: #ffffff;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       color: #1f2937;
     }
 
-    /* Full-viewport image, never cropped */
-    #photo {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: contain;         /* key: show whole image */
-      background: #fff;            /* fill remaining space with white bars */
-      user-select: none;
-      -webkit-user-drag: none;
-      touch-action: manipulation;
-    }
-
-    /* Top overlay that doesn’t block the picture */
-    .overlay {
-      position: fixed;
-      left: 0;
-      right: 0;
+    /* Top bar with text so it never covers the photo */
+    header {
+      position: sticky;
       top: 0;
-      display: flex;
-      justify-content: center;
-      padding:
-        calc(var(--pad-y) + env(safe-area-inset-top, 0px))
-        var(--pad-x)
-        var(--pad-y);
-      pointer-events: none; /* allow photo interactions if any */
-      z-index: 2;
-    }
-
-    .box {
-      pointer-events: auto;
-      max-width: 680px;
-      width: 100%;
-      text-align: center;
-
-      /* Keep it minimal so it doesn’t cover the photo */
-      background: rgba(255,255,255,0.65);
+      padding: calc(env(safe-area-inset-top, 0px) + 10px) var(--pad) 10px;
+      background: linear-gradient(#ffffffcc, #ffffff99);
       backdrop-filter: blur(3px);
       -webkit-backdrop-filter: blur(3px);
-      border-radius: 12px;
-      padding: 10px 14px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      z-index: 2;
+      text-align: center;
+      border-bottom: 1px solid #f1f5f9;
     }
-
-    h2 {
+    header h2 {
+      margin: 0 0 6px;
       font-size: 1.1rem;
       color: #1e40af;
-      margin: 0 0 6px;
-      font-weight: 700;
     }
-
-    p {
+    header p {
       margin: 0;
       font-size: 1rem;
       line-height: 1.35;
       white-space: pre-wrap;
     }
-
-    .ref {
+    header .ref {
       margin-top: 6px;
       font-size: 0.95rem;
       font-weight: 600;
       color: #6b7280;
     }
-
-    .error {
+    header .error {
       margin-top: 6px;
       color: #b91c1c;
       font-size: 0.9rem;
     }
 
+    /* Page content area */
+    main {
+      padding: 10px var(--pad) calc(env(safe-area-inset-bottom, 0px) + 18px);
+      display: grid;
+      gap: 12px;
+      place-items: center;
+    }
+
+    /* The photo frame (card) */
+    .frame {
+      width: 100%;
+      max-width: 640px;
+      height: 70vh;                 /* fixed viewport-based height for phones */
+      background: #fff;             /* white bars when letter/pillar-boxing */
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.07);
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      touch-action: manipulation;
+    }
+
+    /* Image fills the frame WITHOUT cropping */
+    #photo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;          /* show entire photo */
+      background: #fff;             /* white bars */
+      user-select: none;
+      -webkit-user-drag: none;
+      transition: opacity 280ms ease;
+    }
+
     /* Small phones */
     @media (max-width: 380px) {
-      .box { padding: 8px 10px; }
-      h2 { font-size: 1rem; }
-      p  { font-size: 0.95rem; }
-      .ref { font-size: 0.9rem; }
+      header h2 { font-size: 1rem; }
+      header p  { font-size: 0.95rem; }
+      header .ref { font-size: 0.9rem; }
+    }
+
+    /* Tiny helper row */
+    .hint {
+      font-size: 0.9rem;
+      color: #6b7280;
+      text-align: center;
     }
   </style>
 </head>
 <body>
-  <!-- Fullscreen photo that will letterbox/pillarbox as needed -->
-  <img id="photo" alt="Background" loading="eager" decoding="async"/>
+  <header>
+    <h2>Today's Encouragement</h2>
+    <p id="quote">Loading...</p>
+    <div class="ref" id="author"></div>
+    <div class="error" id="error"></div>
+  </header>
 
-  <!-- Minimal top overlay (doesn’t block the image) -->
-  <div class="overlay">
-    <div class="box">
-      <h2>Today's Encouragement</h2>
-      <p id="quote">Loading...</p>
-      <div class="ref" id="author"></div>
-      <div class="error" id="error"></div>
-    </div>
-  </div>
+  <main>
+    <figure class="frame" id="frame">
+      <img id="photo" alt="Daily photo" loading="eager" decoding="async"/>
+    </figure>
+    <div class="hint">Tap the photo to show another.</div>
+  </main>
 
   <script>
-    // --- Randomize background photo (contain, never crop) ---
-    function setRandomBackground() {
-      const totalImages = 5;
-      const n = Math.floor(Math.random() * totalImages) + 1;
-      const src = `background_${n}.jpg`;
-      const img = document.getElementById('photo');
+    // ---- Config ----
+    const TOTAL_IMAGES = 5;                 // background_1.jpg … background_5.jpg
+    const USE_CACHE_BUST = false;           // set to true if images are cached stubbornly
 
-      // In case you later add caching-busting, leave as-is for now
-      img.src = src;
+    // Keep track to avoid immediate repeats
+    let lastIndex = -1;
 
-      // Optional: show a tiny fade when image loads
-      img.style.opacity = '0';
-      img.onload = () => {
-        img.style.transition = 'opacity 300ms ease';
-        img.style.opacity = '1';
-      };
-      img.onerror = () => {
-        // Fallback to a default if a file is missing
-        img.src = 'background_1.jpg';
-      };
+    function randomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
-    // --- Load a random quote from local quotes.json ---
+    function nextRandomIndex() {
+      if (TOTAL_IMAGES <= 1) return 1;
+      let i;
+      do { i = randomInt(1, TOTAL_IMAGES); } while (i === lastIndex);
+      lastIndex = i;
+      return i;
+    }
+
+    function pickRandomImage() {
+      const i = nextRandomIndex();
+      const base = `background_${i}.jpg`;
+      return USE_CACHE_BUST ? `${base}?v=${Date.now()}` : base;
+    }
+
+    function setPhoto(src) {
+      const img = document.getElementById('photo');
+      img.style.opacity = '0';
+      const onLoad = () => {
+        img.removeEventListener('load', onLoad);
+        img.style.opacity = '1';
+      };
+      img.addEventListener('load', onLoad, { once: true });
+      img.onerror = () => {
+        // Fallback to 1st image if a file is missing
+        if (!src.includes('background_1.jpg')) {
+          setPhoto(USE_CACHE_BUST ? `background_1.jpg?v=${Date.now()}` : 'background_1.jpg');
+        }
+      };
+      img.src = src;
+    }
+
+    function setRandomPhoto() {
+      setPhoto(pickRandomImage());
+    }
+
+    // Tap to change photo
+    document.getElementById('frame').addEventListener('click', setRandomPhoto);
+
+    // Also refresh on rotate (optional visual polish)
+    window.addEventListener('orientationchange', () => {
+      const img = document.getElementById('photo');
+      img.style.transform = 'translateZ(0)';
+      setTimeout(() => { img.style.transform = ''; }, 200);
+    });
+
+    // ---- Quotes from local JSON ----
     async function loadQuote() {
       const quoteEl = document.getElementById("quote");
       const authorEl = document.getElementById("author");
@@ -150,4 +183,20 @@
 
         const quotes = await res.json();
         const idx = Math.floor(Math.random() * quotes.length);
-        const q = quotes[i]()
+        const q = quotes[idx];
+
+        quoteEl.textContent = q.quote;
+        authorEl.textContent = q.author ? "— " + q.author : "";
+      } catch (e) {
+        quoteEl.textContent = "⚠️ Unable to load quotes.";
+        authorEl.textContent = "";
+        errEl.textContent = "Make sure quotes.json is in the same folder as index.html.";
+      }
+    }
+
+    // Init
+    setRandomPhoto();
+    loadQuote();
+  </script>
+</body>
+</html>
