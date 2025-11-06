@@ -1,228 +1,118 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Daily Quote</title>
-  <style>
-    :root { --pad: 16px; }
+<script>
+  // ---- Config ----
+  const TOTAL_IMAGES = 18;              // image_1.jpg … image_18.jpg
+  const USE_CACHE_BUST = false;         // flip to true if browser caches too hard
+  const INTERVAL_MS = 5000;             // change every 5 seconds
+  const IMAGE_PREFIX = 'image_';
+  const IMAGE_EXT = '.jpg';
 
-    html, body { height: 100%; }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      color: #1f2937;
-      background: url('background.png') no-repeat center center fixed;
-      background-size: cover;
-      background-color: #fff;
+  let order = [];       // shuffled indices, e.g., [7, 3, 15, ...]
+  let cursor = 0;       // where we are in the shuffled list
+  let timerId = null;
+
+  // Respect reduced motion
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Fisher–Yates shuffle
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
+    return arr;
+  }
 
-    header {
-      position: sticky;
-      top: 0;
-      padding: calc(env(safe-area-inset-top, 0px) + 10px) var(--pad) 10px;
-      background: linear-gradient(#ffffffcc, #ffffff99);
-      backdrop-filter: blur(3px);
-      -webkit-backdrop-filter: blur(3px);
-      z-index: 2;
-      text-align: center;
-      border-bottom: 1px solid #f1f5f9;
+  function newOrder() {
+    order = shuffle(Array.from({ length: TOTAL_IMAGES }, (_, i) => i + 1));
+    cursor = 0;
+  }
+
+  function nextFromOrder() {
+    if (order.length === 0 || cursor >= order.length) newOrder();
+    return order[cursor++];
+  }
+
+  function pickNextImage() {
+    const i = nextFromOrder();
+    const base = `${IMAGE_PREFIX}${i}${IMAGE_EXT}`;
+    return USE_CACHE_BUST ? `${base}?v=${Date.now()}` : base;
+  }
+
+  function setPhoto(src) {
+    const img = document.getElementById('photo');
+
+    // Preload for smooth swap
+    const pre = new Image();
+    pre.onload = () => {
+      img.style.opacity = '0';
+      requestAnimationFrame(() => {
+        img.src = pre.src;
+        requestAnimationFrame(() => { img.style.opacity = '1'; });
+      });
+    };
+    pre.onerror = () => {
+      // If an image is missing, skip it and advance to the next one
+      setPhoto(pickNextImage());
+    };
+    pre.src = src;
+  }
+
+  function setNextPhoto() {
+    setPhoto(pickNextImage());
+  }
+
+  function startSlideshow() {
+    if (prefersReducedMotion) return;
+    stopSlideshow();
+    timerId = setInterval(setNextPhoto, INTERVAL_MS);
+  }
+
+  function stopSlideshow() {
+    if (timerId !== null) {
+      clearInterval(timerId);
+      timerId = null;
     }
-    header h2 {
-      margin: 0 0 6px;
-      font-size: 1.1rem;
-      color: #1e40af;
+  }
+
+  // Pause when tab is hidden; resume when visible
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopSlideshow();
+    else startSlideshow();
+  });
+
+  // Optional: tiny refresh on orientation change
+  window.addEventListener('orientationchange', () => {
+    const img = document.getElementById('photo');
+    img.style.transform = 'translateZ(0)';
+    setTimeout(() => { img.style.transform = ''; }, 200);
+  });
+
+  // ---- Quotes (unchanged) ----
+  async function loadQuote() {
+    const quoteEl = document.getElementById("quote");
+    const authorEl = document.getElementById("author");
+    const errEl = document.getElementById("error");
+
+    try {
+      const res = await fetch("quotes.json");
+      if (!res.ok) throw new Error("File not found");
+
+      const quotes = await res.json();
+      const idx = Math.floor(Math.random() * quotes.length);
+      const q = quotes[idx];
+
+      quoteEl.textContent = q.quote;
+      authorEl.textContent = q.author ? "— " + q.author : "";
+    } catch (e) {
+      quoteEl.textContent = "⚠️ Unable to load quotes.";
+      authorEl.textContent = "";
+      errEl.textContent = "Make sure quotes.json is in the same folder as index.html.";
     }
-    header p {
-      margin: 0;
-      font-size: 1rem;
-      line-height: 1.35;
-      white-space: pre-wrap;
-    }
-    header .ref {
-      margin-top: 6px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: #6b7280;
-    }
-    header .error {
-      margin-top: 6px;
-      color: #b91c1c;
-      font-size: 0.9rem;
-    }
+  }
 
-    main {
-      padding: 10px var(--pad) calc(env(safe-area-inset-bottom, 0px) + 18px);
-      display: grid;
-      gap: 12px;
-      place-items: center;
-    }
-
-    .frame {
-      width: 100%;
-      max-width: 640px;
-      height: 70vh;
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 14px;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.07);
-      overflow: hidden;
-      display: grid;
-      place-items: center;
-      /* no pointer interactions; user can't change image */
-      pointer-events: none;
-    }
-
-    #photo {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: #fff;
-      user-select: none;
-      -webkit-user-drag: none;
-      transition: opacity 280ms ease;
-      opacity: 0; /* fade in on first load */
-    }
-
-    .hint {
-      font-size: 0.9rem;
-      color: #6b7280;
-      text-align: center;
-      /* remove the old tap hint */
-      display: none;
-    }
-
-    @media (max-width: 380px) {
-      header h2 { font-size: 1rem; }
-      header p  { font-size: 0.95rem; }
-      header .ref { font-size: 0.9rem; }
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <h2>Today's Encouragement</h2>
-    <p id="quote">Loading...</p>
-    <div class="ref" id="author"></div>
-    <div class="error" id="error"></div>
-  </header>
-
-  <main>
-    <figure class="frame" id="frame">
-      <img id="photo" alt="Daily photo" loading="eager" decoding="async"/>
-    </figure>
-    <div class="hint"></div>
-  </main>
-
-  <script>
-    // ---- Config ----
-    const TOTAL_IMAGES = 5;                 // image_1.jpg … image_5.jpg
-    const USE_CACHE_BUST = false;           // set true if caching is stubborn
-    const INTERVAL_MS = 5000;               // change every 5 seconds
-
-    let lastIndex = -1;
-    let timerId = null;
-
-    // Respect reduced motion preferences
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    function randomInt(min, max) {
-      return Math.floor(Math.random() * (max - min + 1)) + min;
-    }
-
-    function nextRandomIndex() {
-      if (TOTAL_IMAGES <= 1) return 1;
-      let i;
-      do { i = randomInt(1, TOTAL_IMAGES); } while (i === lastIndex);
-      lastIndex = i;
-      return i;
-    }
-
-    function pickRandomImage() {
-      const i = nextRandomIndex();
-      const base = `image_${i}.jpg`;
-      return USE_CACHE_BUST ? `${base}?v=${Date.now()}` : base;
-    }
-
-    function setPhoto(src) {
-      const img = document.getElementById('photo');
-
-      // Preload to avoid flash
-      const pre = new Image();
-      pre.onload = () => {
-        img.style.opacity = '0';
-        // microtask to allow opacity transition to start
-        requestAnimationFrame(() => {
-          img.src = pre.src;
-          requestAnimationFrame(() => { img.style.opacity = '1'; });
-        });
-      };
-      pre.onerror = () => {
-        if (!src.includes('image_1.jpg')) {
-          setPhoto(USE_CACHE_BUST ? `image_1.jpg?v=${Date.now()}` : 'image_1.jpg');
-        }
-      };
-      pre.src = src;
-    }
-
-    function setRandomPhoto() {
-      setPhoto(pickRandomImage());
-    }
-
-    function startSlideshow() {
-      if (prefersReducedMotion) return; // don't auto-rotate
-      stopSlideshow();
-      timerId = setInterval(setRandomPhoto, INTERVAL_MS);
-    }
-
-    function stopSlideshow() {
-      if (timerId !== null) {
-        clearInterval(timerId);
-        timerId = null;
-      }
-    }
-
-    // Pause when tab is hidden; resume when visible
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stopSlideshow();
-      else startSlideshow();
-    });
-
-    // Optional small refresh on orientation change
-    window.addEventListener('orientationchange', () => {
-      const img = document.getElementById('photo');
-      img.style.transform = 'translateZ(0)';
-      setTimeout(() => { img.style.transform = ''; }, 200);
-    });
-
-    // ---- Load quotes ----
-    async function loadQuote() {
-      const quoteEl = document.getElementById("quote");
-      const authorEl = document.getElementById("author");
-      const errEl = document.getElementById("error");
-
-      try {
-        const res = await fetch("quotes.json");
-        if (!res.ok) throw new Error("File not found");
-
-        const quotes = await res.json();
-        const idx = Math.floor(Math.random() * quotes.length);
-        const q = quotes[idx];
-
-        quoteEl.textContent = q.quote;
-        authorEl.textContent = q.author ? "— " + q.author : "";
-      } catch (e) {
-        quoteEl.textContent = "⚠️ Unable to load quotes.";
-        authorEl.textContent = "";
-        errEl.textContent = "Make sure quotes.json is in the same folder as index.html.";
-      }
-    }
-
-    // ---- Init ----
-    setRandomPhoto();   // show first image
-    loadQuote();
-    startSlideshow();   // then rotate every 5s
-  </script>
-</body>
-</html>
-
+  // ---- Init ----
+  newOrder();       // create the first shuffled cycle
+  setNextPhoto();   // show the first image from the order
+  loadQuote();
+  startSlideshow(); // then rotate every 5s
+</script>
