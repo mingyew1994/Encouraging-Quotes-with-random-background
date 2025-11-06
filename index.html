@@ -12,12 +12,11 @@
       margin: 0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       color: #1f2937;
-      background: url('background.png') no-repeat center center fixed;
+      background: url('background.jpg') no-repeat center center fixed;
       background-size: cover;
       background-color: #fff;
     }
 
-    /* Top bar (always visible, doesn't cover image) */
     header {
       position: sticky;
       top: 0;
@@ -29,34 +28,29 @@
       text-align: center;
       border-bottom: 1px solid #f1f5f9;
     }
-
     header h2 {
       margin: 0 0 6px;
       font-size: 1.1rem;
       color: #1e40af;
     }
-
     header p {
       margin: 0;
       font-size: 1rem;
       line-height: 1.35;
       white-space: pre-wrap;
     }
-
     header .ref {
       margin-top: 6px;
       font-size: 0.95rem;
       font-weight: 600;
       color: #6b7280;
     }
-
     header .error {
       margin-top: 6px;
       color: #b91c1c;
       font-size: 0.9rem;
     }
 
-    /* Page layout */
     main {
       padding: 10px var(--pad) calc(env(safe-area-inset-bottom, 0px) + 18px);
       display: grid;
@@ -64,11 +58,10 @@
       place-items: center;
     }
 
-    /* The image frame */
     .frame {
       width: 100%;
       max-width: 640px;
-      height: 70vh;                 /* mobile-friendly fixed viewport height */
+      height: 70vh;
       background: #fff;
       border: 1px solid #e5e7eb;
       border-radius: 14px;
@@ -76,26 +69,29 @@
       overflow: hidden;
       display: grid;
       place-items: center;
-      touch-action: manipulation;
+      /* no pointer interactions; user can't change image */
+      pointer-events: none;
     }
 
     #photo {
       width: 100%;
       height: 100%;
-      object-fit: contain;          /* show whole image without cropping */
+      object-fit: contain;
       background: #fff;
       user-select: none;
       -webkit-user-drag: none;
       transition: opacity 280ms ease;
+      opacity: 0; /* fade in on first load */
     }
 
     .hint {
       font-size: 0.9rem;
       color: #6b7280;
       text-align: center;
+      /* remove the old tap hint */
+      display: none;
     }
 
-    /* Small phones */
     @media (max-width: 380px) {
       header h2 { font-size: 1rem; }
       header p  { font-size: 0.95rem; }
@@ -115,14 +111,20 @@
     <figure class="frame" id="frame">
       <img id="photo" alt="Daily photo" loading="eager" decoding="async"/>
     </figure>
-    <div class="hint">Tap the photo to show another.</div>
+    <div class="hint"></div>
   </main>
 
   <script>
     // ---- Config ----
-    const TOTAL_IMAGES = 18;                 // image_1.jpg … image_5.jpg
-    const USE_CACHE_BUST = false;           // set to true if images are cached stubbornly
+    const TOTAL_IMAGES = 5;                 // image_1.jpg … image_5.jpg
+    const USE_CACHE_BUST = false;           // set true if caching is stubborn
+    const INTERVAL_MS = 5000;               // change every 5 seconds
+
     let lastIndex = -1;
+    let timerId = null;
+
+    // Respect reduced motion preferences
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function randomInt(min, max) {
       return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -144,29 +146,49 @@
 
     function setPhoto(src) {
       const img = document.getElementById('photo');
-      img.style.opacity = '0';
-      const onLoad = () => {
-        img.removeEventListener('load', onLoad);
-        img.style.opacity = '1';
+
+      // Preload to avoid flash
+      const pre = new Image();
+      pre.onload = () => {
+        img.style.opacity = '0';
+        // microtask to allow opacity transition to start
+        requestAnimationFrame(() => {
+          img.src = pre.src;
+          requestAnimationFrame(() => { img.style.opacity = '1'; });
+        });
       };
-      img.addEventListener('load', onLoad, { once: true });
-      img.onerror = () => {
-        // fallback to first image if missing
+      pre.onerror = () => {
         if (!src.includes('image_1.jpg')) {
           setPhoto(USE_CACHE_BUST ? `image_1.jpg?v=${Date.now()}` : 'image_1.jpg');
         }
       };
-      img.src = src;
+      pre.src = src;
     }
 
     function setRandomPhoto() {
       setPhoto(pickRandomImage());
     }
 
-    // Tap the frame to switch photo
-    document.getElementById('frame').addEventListener('click', setRandomPhoto);
+    function startSlideshow() {
+      if (prefersReducedMotion) return; // don't auto-rotate
+      stopSlideshow();
+      timerId = setInterval(setRandomPhoto, INTERVAL_MS);
+    }
 
-    // Optional: small orientation refresh
+    function stopSlideshow() {
+      if (timerId !== null) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+    }
+
+    // Pause when tab is hidden; resume when visible
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopSlideshow();
+      else startSlideshow();
+    });
+
+    // Optional small refresh on orientation change
     window.addEventListener('orientationchange', () => {
       const img = document.getElementById('photo');
       img.style.transform = 'translateZ(0)';
@@ -196,10 +218,10 @@
       }
     }
 
-    // Init
-    setRandomPhoto();
+    // ---- Init ----
+    setRandomPhoto();   // show first image
     loadQuote();
+    startSlideshow();   // then rotate every 5s
   </script>
 </body>
 </html>
-
