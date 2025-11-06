@@ -10,12 +10,14 @@
     html, body { height: 100%; }
     body {
       margin: 0;
-      background: #ffffff;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       color: #1f2937;
+      background: url('background.png') no-repeat center center fixed;
+      background-size: cover;
+      background-color: #fff;
     }
 
-    /* Top bar with text so it never covers the photo */
+    /* Top bar (always visible, doesn't cover image) */
     header {
       position: sticky;
       top: 0;
@@ -27,30 +29,34 @@
       text-align: center;
       border-bottom: 1px solid #f1f5f9;
     }
+
     header h2 {
       margin: 0 0 6px;
       font-size: 1.1rem;
       color: #1e40af;
     }
+
     header p {
       margin: 0;
       font-size: 1rem;
       line-height: 1.35;
       white-space: pre-wrap;
     }
+
     header .ref {
       margin-top: 6px;
       font-size: 0.95rem;
       font-weight: 600;
       color: #6b7280;
     }
+
     header .error {
       margin-top: 6px;
       color: #b91c1c;
       font-size: 0.9rem;
     }
 
-    /* Page content area */
+    /* Page layout */
     main {
       padding: 10px var(--pad) calc(env(safe-area-inset-bottom, 0px) + 18px);
       display: grid;
@@ -58,12 +64,12 @@
       place-items: center;
     }
 
-    /* The photo frame (card) */
+    /* The image frame */
     .frame {
       width: 100%;
       max-width: 640px;
-      height: 70vh;                 /* fixed viewport-based height for phones */
-      background: #fff;             /* white bars when letter/pillar-boxing */
+      height: 70vh;                 /* mobile-friendly fixed viewport height */
+      background: #fff;
       border: 1px solid #e5e7eb;
       border-radius: 14px;
       box-shadow: 0 6px 16px rgba(0,0,0,0.07);
@@ -73,15 +79,20 @@
       touch-action: manipulation;
     }
 
-    /* Image fills the frame WITHOUT cropping */
     #photo {
       width: 100%;
       height: 100%;
-      object-fit: contain;          /* show entire photo */
-      background: #fff;             /* white bars */
+      object-fit: contain;          /* show whole image without cropping */
+      background: #fff;
       user-select: none;
       -webkit-user-drag: none;
       transition: opacity 280ms ease;
+    }
+
+    .hint {
+      font-size: 0.9rem;
+      color: #6b7280;
+      text-align: center;
     }
 
     /* Small phones */
@@ -89,13 +100,6 @@
       header h2 { font-size: 1rem; }
       header p  { font-size: 0.95rem; }
       header .ref { font-size: 0.9rem; }
-    }
-
-    /* Tiny helper row */
-    .hint {
-      font-size: 0.9rem;
-      color: #6b7280;
-      text-align: center;
     }
   </style>
 </head>
@@ -116,10 +120,8 @@
 
   <script>
     // ---- Config ----
-    const TOTAL_IMAGES = 5;                 // background_1.jpg … background_5.jpg
+    const TOTAL_IMAGES = 5;                 // image_1.jpg … image_5.jpg
     const USE_CACHE_BUST = false;           // set to true if images are cached stubbornly
-
-    // Keep track to avoid immediate repeats
     let lastIndex = -1;
 
     function randomInt(min, max) {
@@ -136,7 +138,7 @@
 
     function pickRandomImage() {
       const i = nextRandomIndex();
-      const base = `background_${i}.jpg`;
+      const base = `image_${i}.jpg`;
       return USE_CACHE_BUST ? `${base}?v=${Date.now()}` : base;
     }
 
@@ -149,9 +151,9 @@
       };
       img.addEventListener('load', onLoad, { once: true });
       img.onerror = () => {
-        // Fallback to 1st image if a file is missing
-        if (!src.includes('background_1.jpg')) {
-          setPhoto(USE_CACHE_BUST ? `background_1.jpg?v=${Date.now()}` : 'background_1.jpg');
+        // fallback to first image if missing
+        if (!src.includes('image_1.jpg')) {
+          setPhoto(USE_CACHE_BUST ? `image_1.jpg?v=${Date.now()}` : 'image_1.jpg');
         }
       };
       img.src = src;
@@ -161,17 +163,17 @@
       setPhoto(pickRandomImage());
     }
 
-    // Tap to change photo
+    // Tap the frame to switch photo
     document.getElementById('frame').addEventListener('click', setRandomPhoto);
 
-    // Also refresh on rotate (optional visual polish)
+    // Optional: small orientation refresh
     window.addEventListener('orientationchange', () => {
       const img = document.getElementById('photo');
       img.style.transform = 'translateZ(0)';
       setTimeout(() => { img.style.transform = ''; }, 200);
     });
 
-    // ---- Quotes from local JSON ----
+    // ---- Load quotes ----
     async function loadQuote() {
       const quoteEl = document.getElementById("quote");
       const authorEl = document.getElementById("author");
